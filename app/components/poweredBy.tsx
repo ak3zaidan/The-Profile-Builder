@@ -5,7 +5,7 @@ export default function VaultButton({ className = "" }: { className?: string }) 
     <div className={`w-full flex justify-end px-4 md:bottom-4 md:right-4 bg-gray-100 border-none ${className}`}>
       <button
         className="flex items-center space-x-1 rounded-md px-2 pt-1 cursor-pointer"
-        onClick={() => window.open('https://discord.gg/account-vaultx', '_blank')}
+        onClick={() => window.open('https://discord.gg/eTmHPq7TNN', '_blank')}
       >
         <Image
           src="/vault.png"
