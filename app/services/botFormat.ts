@@ -801,4 +801,48 @@ export const botFormats: Record<string, BotFormat<any>> = {
     filename: "nexar_profiles.csv",
   },
 
+  /* Astral Format (JSON) */
+  "Astral Format": {
+    label: "Astral Format (JSON)",
+    fileType: "json",
+    transform: (g, p, index = 0) => {
+      const uuid = uuidv4();
+      const groupUuid = uuidv4();
+      const expMonth = p.card.exp.split("/")[0];
+      const expYear = p.card.exp.split("/")[1];
+      const fullExpYear = expYear.length === 2 ? `20${expYear}` : expYear;
+
+      return {
+        name: p.firstName + " " + p.lastName,
+        profilename: `${g}_${index + 1}`,
+        zipcode: p.shippingAddress.zipCode,
+        city: p.shippingAddress.city,
+        state: getStateAbbr(p.shippingAddress.state),
+        aptunit: p.shippingAddress.address2 || "",
+        streetaddress: p.shippingAddress.address1,
+        telephone: p.phone.replace(/\D/g, ''),
+        email: p.email,
+        cardnumber: p.card.number,
+        expirationmonth: expMonth,
+        expirationyear: fullExpYear,
+        cvv: p.card.cvv,
+        country: p.shippingAddress.country === "US" ? "USA" : p.shippingAddress.country,
+        group: groupUuid,
+        billingName: p.billingAddress.firstName + " " + p.billingAddress.lastName,
+        billingEmail: p.email,
+        billingTelephone: p.phone.replace(/\D/g, ''),
+        billingStreetaddress: p.billingAddress.address1,
+        billingAptunit: p.billingAddress.address2 || "",
+        billingState: getStateAbbr(p.billingAddress.state),
+        billingCountry: p.billingAddress.country === "US" ? "USA" : p.billingAddress.country,
+        billingCity: p.billingAddress.city,
+        billingZipcode: p.billingAddress.zipCode,
+        sameBilling: false,
+        id: uuid,
+        lastUpdated: Date.now()
+      };
+    },
+    filename: "astral_profiles.json",
+  },
+
 };
