@@ -346,7 +346,10 @@ export const botFormats: Record<string, BotFormat<any>> = {
         payment: {
           name: p.card.holderName,
           num: p.card.number,
-          year: `20${p.card.exp.split("/")[1]}`,
+          year: (() => {
+            const y = p.card.exp.split("/")[1];
+            return y.length === 2 ? `20${y}` : y.slice(-4);
+          })(),
           month: p.card.exp.split("/")[0],
           cvv: p.card.cvv,
         },
