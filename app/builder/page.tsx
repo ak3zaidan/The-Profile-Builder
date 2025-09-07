@@ -178,8 +178,12 @@ export default function ProfileBuilder() {
   }, []);
 
   useEffect(() => {
-    setCurrentPage(1)
-  }, [profiles])
+    // Preserve current page across profile content edits; only adjust if out of range
+    setCurrentPage((prev) => {
+      const pages = Math.max(1, Math.ceil(profiles.length / itemsPerPage))
+      return Math.min(prev, pages)
+    })
+  }, [totalPages])
 
   // Debug effect to monitor profiles state
   useEffect(() => {
