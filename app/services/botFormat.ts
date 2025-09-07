@@ -53,6 +53,26 @@ const countryCodeToName: Record<string, string> = {
   'ID': 'Indonesia'
 };
 
+// Reverse map (full name → code)
+const countryNameToCode: Record<string, string> = Object.fromEntries(
+  Object.entries(countryCodeToName).map(([code, name]) => [name.toLowerCase(), code])
+);
+
+// Validate and normalize country input
+function normalizeCountry(country: string): string {
+  // Already valid code
+  if (countryCodeToName[country]) {
+    return country;
+  }
+  // Convert from full name
+  const code = countryNameToCode[country.toLowerCase()];
+  if (code) {
+    return code;
+  }
+  // Unknown value → return as-is
+  return country;
+}
+
 // Function to get full country name from code
 const getCountryName = (code: string): string => {
   return countryCodeToName[code] || code;
@@ -641,7 +661,7 @@ export const botFormats: Record<string, BotFormat<any>> = {
         p.shippingAddress.city,
         getStateAbbr(p.shippingAddress.state),
         p.shippingAddress.zipCode,
-        p.shippingAddress.country,
+        normalizeCountry(p.shippingAddress.country),
         p.billingAddress.firstName,
         p.billingAddress.lastName,
         p.billingAddress.address1,
@@ -649,7 +669,7 @@ export const botFormats: Record<string, BotFormat<any>> = {
         p.billingAddress.city,
         getStateAbbr(p.billingAddress.state),
         p.billingAddress.zipCode,
-        p.billingAddress.country
+        normalizeCountry(p.billingAddress.country)
       ]
     },
     filename: "shikari_profiles.csv",
