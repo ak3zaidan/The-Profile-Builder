@@ -269,7 +269,7 @@ export const botFormats: Record<string, BotFormat<any>> = {
         })(),
         cardNumber: p.card.number,
         cardMonth: p.card.exp.split("/")[0],
-        cardYear: p.card.exp.split("/")[1],
+        cardYear: p.card.exp.split("/")[1].slice(-2),
         cardCvv: p.card.cvv,
       }
     }),
