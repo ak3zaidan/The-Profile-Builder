@@ -567,7 +567,7 @@ export const botFormats: Record<string, BotFormat<any>> = {
               address2: p.shippingAddress.address2 || "",
               zip: p.shippingAddress.zipCode,
               city: p.shippingAddress.city,
-              country: p.shippingAddress.country,
+              country: countryCodeToName[p.shippingAddress.country],
               state: p.shippingAddress.state,
             },
             billing: {
@@ -577,7 +577,7 @@ export const botFormats: Record<string, BotFormat<any>> = {
               address2: p.billingAddress.address2 || "",
               zip: p.billingAddress.zipCode,
               city: p.billingAddress.city,
-              country: p.billingAddress.country,
+              country: countryCodeToName[p.billingAddress.country],
               state: p.billingAddress.state,
             }
           }]
