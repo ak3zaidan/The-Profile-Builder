@@ -544,43 +544,45 @@ export const botFormats: Record<string, BotFormat<any>> = {
     fileType: "json",
     transform: (g, p) => {
       const randomId = generateAlphaNumericId(8, true);
-      return {
-        id: randomId,
-        name: g,
-        profiles: [{
+      return [
+        {
           id: randomId,
-          name: p.firstName + " " + p.lastName,
-          email: p.email,
-          phone: p.phone.replace(/\D/g, ''),
-          billingDifferent: true,
-          card: {
-            number: p.card.number,
-            expMonth: p.card.exp.split("/")[0],
-            expYear: `20${p.card.exp.split("/")[1]}`,
-            cvv: p.card.cvv,
-          },
-          delivery: {
-            firstName: p.shippingAddress.firstName,
-            lastName: p.shippingAddress.lastName,
-            address1: p.shippingAddress.address1,
-            address2: p.shippingAddress.address2 || "",
-            zip: p.shippingAddress.zipCode,
-            city: p.shippingAddress.city,
-            country: p.shippingAddress.country,
-            state: p.shippingAddress.state,
-          },
-          billing: {
-            firstName: p.billingAddress.firstName,
-            lastName: p.billingAddress.lastName,
-            address1: p.billingAddress.address1,
-            address2: p.billingAddress.address2 || "",
-            zip: p.billingAddress.zipCode,
-            city: p.billingAddress.city,
-            country: p.billingAddress.country,
-            state: p.billingAddress.state,
-          }
-        }]
-      }
+          name: g,
+          profiles: [{
+            id: randomId,
+            name: p.firstName + " " + p.lastName,
+            email: p.email,
+            phone: p.phone.replace(/\D/g, ''),
+            billingDifferent: true,
+            card: {
+              number: p.card.number,
+              expMonth: p.card.exp.split("/")[0],
+              expYear: `20${p.card.exp.split("/")[1]}`,
+              cvv: p.card.cvv,
+            },
+            delivery: {
+              firstName: p.shippingAddress.firstName,
+              lastName: p.shippingAddress.lastName,
+              address1: p.shippingAddress.address1,
+              address2: p.shippingAddress.address2 || "",
+              zip: p.shippingAddress.zipCode,
+              city: p.shippingAddress.city,
+              country: p.shippingAddress.country,
+              state: p.shippingAddress.state,
+            },
+            billing: {
+              firstName: p.billingAddress.firstName,
+              lastName: p.billingAddress.lastName,
+              address1: p.billingAddress.address1,
+              address2: p.billingAddress.address2 || "",
+              zip: p.billingAddress.zipCode,
+              city: p.billingAddress.city,
+              country: p.billingAddress.country,
+              state: p.billingAddress.state,
+            }
+          }]
+        }
+      ];
     },
     filename: "cyber_profiles.json",
   },
