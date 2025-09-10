@@ -73,6 +73,35 @@ export default function ProfileBuilder() {
 
   const [showVCCManager, setShowVCCManager] = useState(false)
   const [shouldResetVCC, setShouldResetVCC] = useState(false);
+  const [showEditAllModal, setShowEditAllModal] = useState(false);
+
+  // Edit all form state
+  const [editAllFields, setEditAllFields] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    shippingFirstName: '',
+    shippingLastName: '',
+    shippingAddress1: '',
+    shippingAddress2: '',
+    shippingCity: '',
+    shippingState: '',
+    shippingZipCode: '',
+    shippingCountry: '',
+    billingFirstName: '',
+    billingLastName: '',
+    billingAddress1: '',
+    billingAddress2: '',
+    billingCity: '',
+    billingState: '',
+    billingZipCode: '',
+    billingCountry: '',
+    cardHolderName: '',
+    cardNumber: '',
+    cardExp: '',
+    cardCvv: ''
+  });
 
   const [groupName, setGroupName] = useState("")
   const [profileCount, setProfileCount] = useState(1)
@@ -1294,6 +1323,186 @@ export default function ProfileBuilder() {
       })
     }
   }
+
+  const validateEditAllFields = () => {
+    let error = "";
+
+    // Validate email if provided
+    if (editAllFields.email && !validateEmail(editAllFields.email)) {
+      error = "Invalid email format";
+    }
+
+    // Validate phone if provided
+    if (editAllFields.phone) {
+      const phoneDigits = editAllFields.phone.replace(/\D/g, '');
+      if (!/^\d{10}$/.test(phoneDigits)) {
+        error = "Phone number must be exactly 10 digits";
+      }
+    }
+
+    // Validate card number if provided
+    if (editAllFields.cardNumber) {
+      const cardType = getCardType(editAllFields.cardNumber);
+      const digits = editAllFields.cardNumber.replace(/\D/g, '');
+
+      if (cardType === "amex" && !/^\d{15}$/.test(digits)) {
+        error = "American Express card number must have 15 digits";
+      } else if (cardType !== "amex" && cardType !== "unknown" && !/^\d{16}$/.test(digits)) {
+        error = "Card number must have 16 digits";
+      } else if (cardType === "unknown" && digits.length < 13) {
+        error = "Card number must be at least 13 digits";
+      }
+    }
+
+    // Validate card expiration if provided
+    if (editAllFields.cardExp) {
+      if (!/^\d{2}\/\d{2}$/.test(editAllFields.cardExp)) {
+        error = "Card expiration must be in MM/YY format";
+      } else {
+        const [expMonth, expYear] = editAllFields.cardExp.split("/").map((v) => parseInt(v.trim(), 10));
+
+        // Validate month range (1-12)
+        if (expMonth < 1 || expMonth > 12) {
+          error = "Month must be between 01 and 12";
+        } else {
+          // Create expiration date as end of month (e.g., 2025-08-31)
+          const expiryDate = new Date(2000 + expYear, expMonth, 0); // last day of the month
+          const currentDate = new Date();
+
+          if (expiryDate < currentDate) {
+            error = "Card has already expired";
+          }
+        }
+      }
+    }
+
+    // Validate CVV if provided
+    if (editAllFields.cardCvv) {
+      const cardType = getCardType(editAllFields.cardNumber || '');
+      const expectedCvvLength = cardType === "amex" ? 4 : 3;
+
+      if (editAllFields.cardCvv.length !== expectedCvvLength) {
+        error = `CVV must be ${expectedCvvLength} digits for ${cardType === "amex" ? "American Express" : "this card type"}`;
+      } else if (!/^\d+$/.test(editAllFields.cardCvv)) {
+        error = "CVV must contain only digits";
+      }
+    }
+
+    // Validate shipping zip code if provided
+    if (editAllFields.shippingZipCode) {
+      if (editAllFields.shippingCountry === 'US' && !/^\d{5}(-\d{4})?$/.test(editAllFields.shippingZipCode)) {
+        error = "US ZIP code must be 5 digits (plus optional 4 digits)";
+      }
+    }
+
+    // Validate billing zip code if provided
+    if (editAllFields.billingZipCode) {
+      if (editAllFields.billingCountry === 'US' && !/^\d{5}(-\d{4})?$/.test(editAllFields.billingZipCode)) {
+        error = "US ZIP code must be 5 digits (plus optional 4 digits)";
+      }
+    }
+
+    if (error) {
+      showToast({ message: error, type: "error" });
+      return false;
+    }
+    return true;
+  };
+
+  const applyEditAll = () => {
+    if (!validateEditAllFields()) {
+      return;
+    }
+
+    const updates = Object.fromEntries(
+      Object.entries(editAllFields).filter(([_, value]) => value.trim() !== '')
+    );
+
+    if (Object.keys(updates).length === 0) {
+      showToast({ message: "No fields to update", type: "error" });
+      return;
+    }
+
+    const updatedProfiles = profiles.map(profile => {
+      const updatedProfile = { ...profile };
+
+      // Update basic profile fields
+      if (updates.firstName) updatedProfile.firstName = updates.firstName;
+      if (updates.lastName) updatedProfile.lastName = updates.lastName;
+      if (updates.email) updatedProfile.email = updates.email;
+      if (updates.phone) updatedProfile.phone = updates.phone;
+
+      // Update shipping address
+      if (updates.shippingFirstName) updatedProfile.shippingAddress.firstName = updates.shippingFirstName;
+      if (updates.shippingLastName) updatedProfile.shippingAddress.lastName = updates.shippingLastName;
+      if (updates.shippingAddress1) updatedProfile.shippingAddress.address1 = updates.shippingAddress1;
+      if (updates.shippingAddress2) updatedProfile.shippingAddress.address2 = updates.shippingAddress2;
+      if (updates.shippingCity) updatedProfile.shippingAddress.city = updates.shippingCity;
+      if (updates.shippingState) updatedProfile.shippingAddress.state = updates.shippingState;
+      if (updates.shippingZipCode) updatedProfile.shippingAddress.zipCode = updates.shippingZipCode;
+      if (updates.shippingCountry) {
+        updatedProfile.shippingAddress.country = updates.shippingCountry;
+        updatedProfile.shippingAddress.countryName = updates.shippingCountry;
+      }
+
+      // Update billing address
+      if (updates.billingFirstName) updatedProfile.billingAddress.firstName = updates.billingFirstName;
+      if (updates.billingLastName) updatedProfile.billingAddress.lastName = updates.billingLastName;
+      if (updates.billingAddress1) updatedProfile.billingAddress.address1 = updates.billingAddress1;
+      if (updates.billingAddress2) updatedProfile.billingAddress.address2 = updates.billingAddress2;
+      if (updates.billingCity) updatedProfile.billingAddress.city = updates.billingCity;
+      if (updates.billingState) updatedProfile.billingAddress.state = updates.billingState;
+      if (updates.billingZipCode) updatedProfile.billingAddress.zipCode = updates.billingZipCode;
+      if (updates.billingCountry) {
+        updatedProfile.billingAddress.country = updates.billingCountry;
+        updatedProfile.billingAddress.countryName = updates.billingCountry;
+      }
+
+      // Update card information
+      if (updates.cardHolderName) updatedProfile.card.holderName = updates.cardHolderName;
+      if (updates.cardNumber) updatedProfile.card.number = updates.cardNumber;
+      if (updates.cardExp) updatedProfile.card.exp = updates.cardExp;
+      if (updates.cardCvv) updatedProfile.card.cvv = updates.cardCvv;
+
+      return updatedProfile;
+    });
+
+    setProfiles(updatedProfiles);
+    setShowEditAllModal(false);
+    showToast({
+      message: `Updated ${Object.keys(updates).length} field(s) for all ${profiles.length} profiles`,
+      type: "success"
+    });
+  };
+
+  const resetEditAllFields = () => {
+    setEditAllFields({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      shippingFirstName: '',
+      shippingLastName: '',
+      shippingAddress1: '',
+      shippingAddress2: '',
+      shippingCity: '',
+      shippingState: '',
+      shippingZipCode: '',
+      shippingCountry: '',
+      billingFirstName: '',
+      billingLastName: '',
+      billingAddress1: '',
+      billingAddress2: '',
+      billingCity: '',
+      billingState: '',
+      billingZipCode: '',
+      billingCountry: '',
+      cardHolderName: '',
+      cardNumber: '',
+      cardExp: '',
+      cardCvv: ''
+    });
+  };
 
   const exportProfiles = async () => {
     if (!exportType) {
@@ -2938,20 +3147,30 @@ export default function ProfileBuilder() {
           <div className="mb-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold text-gray-800">Profiles ({profiles.length})</h2>
-              <Button
-                size="sm"
-                disabled={profiles.length === 0}
-                variant="outline"
-                onClick={() => {
-                  setProfiles([]);
-                  setCurrentPage(1);
-                  setEditingProfile(null);
-                }}
-                className="group border-gray-300 text-gray-700 hover:text-red-600 bg-white hover:bg-red-50 hover:border-red-300 transition-colors duration-200">
-                <Trash2 className="w-4 h-4 text-red-600" />
-                Delete profiles
-              </Button>
-
+              <div className="flex space-x-2">
+                <Button
+                  size="sm"
+                  disabled={profiles.length === 0}
+                  variant="outline"
+                  onClick={() => setShowEditAllModal(true)}
+                  className="group border-gray-300 text-gray-700 hover:text-blue-600 bg-white hover:bg-blue-50 hover:border-blue-300 transition-colors duration-200">
+                  <FileUser className="w-4 h-4 text-blue-600" />
+                  Edit All
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={profiles.length === 0}
+                  variant="outline"
+                  onClick={() => {
+                    setProfiles([]);
+                    setCurrentPage(1);
+                    setEditingProfile(null);
+                  }}
+                  className="group border-gray-300 text-gray-700 hover:text-red-600 bg-white hover:bg-red-50 hover:border-red-300 transition-colors duration-200">
+                  <Trash2 className="w-4 h-4 text-red-600" />
+                  Delete profiles
+                </Button>
+              </div>
             </div>
 
             <div>
@@ -3106,6 +3325,388 @@ export default function ProfileBuilder() {
       </div>
 
       <PoweredBy />
+
+      {/* Edit All Modal */}
+      <Modal
+        title="Edit All Profiles"
+        open={showEditAllModal}
+        onCancel={() => {
+          setShowEditAllModal(false);
+          resetEditAllFields();
+        }}
+        footer={null}
+        width={800}
+        className="edit-all-modal"
+      >
+        <div className="space-y-6">
+          <p className="text-gray-600 mb-4">
+            Edit fields for all {profiles.length} profiles. Leave fields empty to keep current values.
+          </p>
+
+          <Tabs defaultValue="basic" className="w-full">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="basic">Basic Info</TabsTrigger>
+              <TabsTrigger value="shipping">Shipping</TabsTrigger>
+              <TabsTrigger value="billing">Billing</TabsTrigger>
+              <TabsTrigger value="card">Card</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="basic" className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="mass-firstName">First Name</Label>
+                  <Input
+                    id="mass-firstName"
+                    value={editAllFields.firstName}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, firstName: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-lastName">Last Name</Label>
+                  <Input
+                    id="mass-lastName"
+                    value={editAllFields.lastName}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, lastName: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-email">Email</Label>
+                  <Input
+                    id="mass-email"
+                    type="email"
+                    value={editAllFields.email}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-phone">Phone</Label>
+                  <Input
+                    id="mass-phone"
+                    value={editAllFields.phone}
+                    onChange={(e) => {
+                      // Restrict to 10 digits only
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setEditAllFields(prev => ({ ...prev, phone: digits }));
+                    }}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="shipping" className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="mass-shippingFirstName">First Name</Label>
+                  <Input
+                    id="mass-shippingFirstName"
+                    value={editAllFields.shippingFirstName}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, shippingFirstName: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-shippingLastName">Last Name</Label>
+                  <Input
+                    id="mass-shippingLastName"
+                    value={editAllFields.shippingLastName}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, shippingLastName: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label htmlFor="mass-shippingAddress1">Address Line 1</Label>
+                  <Input
+                    id="mass-shippingAddress1"
+                    value={editAllFields.shippingAddress1}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, shippingAddress1: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label htmlFor="mass-shippingAddress2">Address Line 2</Label>
+                  <Input
+                    id="mass-shippingAddress2"
+                    value={editAllFields.shippingAddress2}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, shippingAddress2: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-shippingCity">City</Label>
+                  <Input
+                    id="mass-shippingCity"
+                    value={editAllFields.shippingCity}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, shippingCity: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-shippingState">State</Label>
+                  <Input
+                    id="mass-shippingState"
+                    value={editAllFields.shippingState}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, shippingState: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-shippingCountry">Country</Label>
+                  <CountryPicker
+                    value={editAllFields.shippingCountry}
+                    onChange={(code, name) => {
+                      setEditAllFields(prev => ({ ...prev, shippingCountry: code }));
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-shippingZipCode">Zip Code</Label>
+                  <Input
+                    id="mass-shippingZipCode"
+                    value={editAllFields.shippingZipCode}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '');
+                      // Format US zip codes: 12345 or 12345-6789
+                      if (editAllFields.shippingCountry === 'US' && value.length > 5) {
+                        value = value.slice(0, 5) + '-' + value.slice(5, 9);
+                      }
+                      setEditAllFields(prev => ({ ...prev, shippingZipCode: value }));
+                    }}
+                    placeholder={editAllFields.shippingCountry === 'US' ? "12345 or 12345-6789" : "Leave empty to keep current"}
+                    className="bg-white border-gray-300 text-gray-800"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={10}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="billing" className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="mass-billingFirstName">First Name</Label>
+                  <Input
+                    id="mass-billingFirstName"
+                    value={editAllFields.billingFirstName}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, billingFirstName: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-billingLastName">Last Name</Label>
+                  <Input
+                    id="mass-billingLastName"
+                    value={editAllFields.billingLastName}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, billingLastName: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label htmlFor="mass-billingAddress1">Address Line 1</Label>
+                  <Input
+                    id="mass-billingAddress1"
+                    value={editAllFields.billingAddress1}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, billingAddress1: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label htmlFor="mass-billingAddress2">Address Line 2</Label>
+                  <Input
+                    id="mass-billingAddress2"
+                    value={editAllFields.billingAddress2}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, billingAddress2: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-billingCity">City</Label>
+                  <Input
+                    id="mass-billingCity"
+                    value={editAllFields.billingCity}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, billingCity: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-billingState">State</Label>
+                  <Input
+                    id="mass-billingState"
+                    value={editAllFields.billingState}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, billingState: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-billingCountry">Country</Label>
+                  <CountryPicker
+                    value={editAllFields.billingCountry}
+                    onChange={(code, name) => {
+                      setEditAllFields(prev => ({ ...prev, billingCountry: code }));
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-billingZipCode">Zip Code</Label>
+                  <Input
+                    id="mass-billingZipCode"
+                    value={editAllFields.billingZipCode}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '');
+                      // Format US zip codes: 12345 or 12345-6789
+                      if (editAllFields.billingCountry === 'US' && value.length > 5) {
+                        value = value.slice(0, 5) + '-' + value.slice(5, 9);
+                      }
+                      setEditAllFields(prev => ({ ...prev, billingZipCode: value }));
+                    }}
+                    placeholder={editAllFields.billingCountry === 'US' ? "12345 or 12345-6789" : "Leave empty to keep current"}
+                    className="bg-white border-gray-300 text-gray-800"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={10}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="card" className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="mass-cardHolderName">Card Holder Name</Label>
+                  <Input
+                    id="mass-cardHolderName"
+                    value={editAllFields.cardHolderName}
+                    onChange={(e) => setEditAllFields(prev => ({ ...prev, cardHolderName: e.target.value }))}
+                    placeholder="Leave empty to keep current"
+                    className="bg-white border-gray-300 text-gray-800"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-cardNumber">Card Number</Label>
+                  <div className="relative">
+                    <Input
+                      id="mass-cardNumber"
+                      placeholder="XXXX-XXXX-XXXX-XXXX"
+                      value={editAllFields.cardNumber}
+                      onChange={(e) => {
+                        let digits = e.target.value.replace(/\D/g, "").slice(0, 16);
+                        const cardType = getCardType(digits);
+
+                        let formatted = "";
+                        if (cardType === "amex") {
+                          // Amex format: 4-6-5
+                          formatted = digits
+                            .replace(/^(\d{0,4})(\d{0,6})(\d{0,5}).*/, (_, g1, g2, g3) => {
+                              return [g1, g2, g3].filter(Boolean).join("-");
+                            });
+                        } else {
+                          // Default format: 4-4-4-4
+                          formatted = digits
+                            .replace(/(\d{4})(?=\d)/g, "$1-")
+                            .slice(0, 19);
+                        }
+
+                        setEditAllFields(prev => ({ ...prev, cardNumber: formatted }));
+                      }}
+                      className="bg-white border-gray-300 text-gray-800 text-sm w-full pr-10"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={19}
+                    />
+
+                    {/* Show card type image */}
+                    {getCardType(editAllFields.cardNumber) !== "unknown" && (
+                      <img
+                        src={cardTypeImages[getCardType(editAllFields.cardNumber)]}
+                        alt="Card Type"
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 h-5 w-8 object-contain"
+                      />
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="mass-cardExp">Expiration (MM/YY)</Label>
+                  <Input
+                    id="mass-cardExp"
+                    value={editAllFields.cardExp}
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                      if (value.length >= 2) {
+                        value = value.slice(0, 2) + '/' + value.slice(2);
+                      }
+                      setEditAllFields(prev => ({ ...prev, cardExp: value }));
+                    }}
+                    placeholder="MM/YY"
+                    className="bg-white border-gray-300 text-gray-800"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={5}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mass-cardCvv">CVV</Label>
+                  <Input
+                    id="mass-cardCvv"
+                    value={editAllFields.cardCvv}
+                    onChange={(e) => {
+                      const cardType = getCardType(editAllFields.cardNumber || '');
+                      const maxLength = cardType === "amex" ? 4 : 3;
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, maxLength);
+                      setEditAllFields(prev => ({ ...prev, cardCvv: digits }));
+                    }}
+                    placeholder={getCardType(editAllFields.cardNumber || '') === "amex" ? "4 digits" : "3 digits"}
+                    className="bg-white border-gray-300 text-gray-800"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={4}
+                  />
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <div className="flex justify-end space-x-2 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowEditAllModal(false);
+                resetEditAllFields();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={applyEditAll}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Apply to All Profiles
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
