@@ -1320,6 +1320,54 @@ export default function ProfileBuilder() {
         },
       }));
 
+      // Country code to name mapping for Cyber Format
+      const countryCodeToName: Record<string, string> = {
+        'US': 'United States',
+        'GB': 'United Kingdom',
+        'CA': 'Canada',
+        'AU': 'Australia',
+        'DE': 'Germany',
+        'FR': 'France',
+        'IT': 'Italy',
+        'ES': 'Spain',
+        'NL': 'Netherlands',
+        'BE': 'Belgium',
+        'CH': 'Switzerland',
+        'AT': 'Austria',
+        'SE': 'Sweden',
+        'NO': 'Norway',
+        'DK': 'Denmark',
+        'FI': 'Finland',
+        'IE': 'Ireland',
+        'NZ': 'New Zealand',
+        'JP': 'Japan',
+        'CN': 'China',
+        'IN': 'India',
+        'BR': 'Brazil',
+        'MX': 'Mexico',
+        'AR': 'Argentina',
+        'CL': 'Chile',
+        'CO': 'Colombia',
+        'PE': 'Peru',
+        'VE': 'Venezuela',
+        'ZA': 'South Africa',
+        'RU': 'Russia',
+        'TR': 'Turkey',
+        'IL': 'Israel',
+        'AE': 'United Arab Emirates',
+        'SA': 'Saudi Arabia',
+        'SG': 'Singapore',
+        'MY': 'Malaysia',
+        'TH': 'Thailand',
+        'VN': 'Vietnam',
+        'PH': 'Philippines',
+        'ID': 'Indonesia'
+      };
+
+      const getCountryName = (code: string): string => {
+        return countryCodeToName[code] || code;
+      };
+
       let formattedForBot;
       if (exportType === "Cyber Format") {
         // For Cyber format, we need to create a single object with all profiles in one array
@@ -1344,7 +1392,7 @@ export default function ProfileBuilder() {
               address2: p.shippingAddress.address2 || "",
               zip: p.shippingAddress.zipCode,
               city: p.shippingAddress.city,
-              country: p.shippingAddress.country,
+              country: getCountryName(p.shippingAddress.country),
               state: p.shippingAddress.state,
             },
             billing: {
@@ -1354,17 +1402,17 @@ export default function ProfileBuilder() {
               address2: p.billingAddress.address2 || "",
               zip: p.billingAddress.zipCode,
               city: p.billingAddress.city,
-              country: p.billingAddress.country,
+              country: getCountryName(p.billingAddress.country),
               state: p.billingAddress.state,
             }
           };
         });
 
-        formattedForBot = {
+        formattedForBot = [{
           id: Math.random().toString(36).substring(2, 10).toUpperCase(),
           name: exportGroupName,
           profiles: cyberProfiles
-        };
+        }];
       } else if (exportType === "Valor Format") {
         // For Valor format, merge all profile objects into one object
         const valorProfiles = cleanProfiles.map((p, index) => {

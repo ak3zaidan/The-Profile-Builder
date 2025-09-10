@@ -109,6 +109,30 @@ export function exportForBot(botKey: string, fileName: string, payload: Profile[
 export function formatProfilesForBot(groupName: string, profiles: Profile[], botKey: string) {
   const bot = botFormats[botKey]
   if (!bot) throw new Error(`Unknown bot: ${botKey}`)
+
+  // Special handling for Cyber Format to group all profiles into one object
+  if (botKey === "Cyber Format") {
+    if (profiles.length === 0) return [];
+
+    // Use the first profile to get the group structure
+    const firstProfile = profiles[0];
+    const groupData = bot.transform(groupName, firstProfile, 0);
+
+    // Collect all profiles into the profiles array
+    const allProfiles = profiles.map((profile, index) => {
+      const profileData = bot.transform(groupName, profile, index);
+      return profileData.profiles[0]; // Extract the profile object from the transform result
+    });
+
+    // Return array with single group object containing all profiles
+    return [{
+      id: groupData.id,
+      name: groupData.name,
+      profiles: allProfiles
+    }];
+  }
+
+  // Default behavior for other formats
   return profiles.map((e, index) => bot.transform(groupName, e, index));
 }
 
