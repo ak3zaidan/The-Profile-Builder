@@ -1360,11 +1360,11 @@ export default function ProfileBuilder() {
           };
         });
 
-        formattedForBot = {
+        formattedForBot = [{
           id: Math.random().toString(36).substring(2, 10).toUpperCase(),
           name: exportGroupName,
           profiles: cyberProfiles
-        };
+        }];
       } else if (exportType === "Valor Format") {
         // For Valor format, merge all profile objects into one object
         const valorProfiles = cleanProfiles.map((p, index) => {
