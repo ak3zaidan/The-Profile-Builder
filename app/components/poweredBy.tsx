@@ -13,7 +13,7 @@ export default function VaultButton({ className = "" }: { className?: string }) 
           width={30}
           height={30}
         />
-        <span className="text-gray-600 text-l font-bold">Powered by Account Vault</span>
+        <span className="text-gray-600 text-l font-bold">Powered by Vault</span>
       </button>
     </div>
   )
