@@ -214,7 +214,6 @@ export default function HomePage() {
           </motion.div>
         )}
       </AnimatePresence>
-      <PoweredBy className={'absolute'} />
     </div>
   )
 }
