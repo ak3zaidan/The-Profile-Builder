@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { Loader2, CreditCard, Mail, Eye, EyeOff } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
@@ -77,6 +78,7 @@ export default function ExtendVCCManager({ onProfilesBuilt, onClose, shouldReset
 
   const [sourceCards, setSourceCards] = useState<SourceCard[]>([])
   const [selectedSourceCard, setSelectedSourceCard] = useState<string>("")
+  const [selectedSourceCards, setSelectedSourceCards] = useState<string[]>([])
   const [limit, setLimit] = useState<string>("$100")
   const [recurrenceFrequency, setRecurrenceFrequency] = useState<"Daily" | "Weekly" | "Monthly">("Daily")
   const [genCount, setGenCount] = useState<string | number>(1)
@@ -175,6 +177,7 @@ export default function ExtendVCCManager({ onProfilesBuilt, onClose, shouldReset
       setIsLoading(false)
       setSourceCards([])
       setSelectedSourceCard("")
+      setSelectedSourceCards([])
       setLimit("$100")
       setRecurrenceFrequency("Daily")
       setGenCount(1)
@@ -379,7 +382,7 @@ export default function ExtendVCCManager({ onProfilesBuilt, onClose, shouldReset
       // Start fetching cards using the existing VCC workflow
       setBulkCreationStage('fetching');
       // Use the calculated fetchCount value for fetching
-      await fetchExistingVCCs(accessToken, selectedSourceCard, fetchCount);
+      await fetchExistingVCCs(accessToken, [selectedSourceCard], fetchCount);
 
       onClose?.();
     } catch (err) {
@@ -395,7 +398,7 @@ export default function ExtendVCCManager({ onProfilesBuilt, onClose, shouldReset
       // Skip timer and proceed directly to fetching cards
       setBulkCreationStage('fetching');
       // Use the calculated fetchCount value for fetching
-      await fetchExistingVCCs(accessToken, selectedSourceCard, fetchCount);
+      await fetchExistingVCCs(accessToken, [selectedSourceCard], fetchCount);
 
       onClose?.();
     } finally {
@@ -485,14 +488,102 @@ export default function ExtendVCCManager({ onProfilesBuilt, onClose, shouldReset
     }
   }
 
-  // Function to fetch existing VCCs with pagination and filtering
-  const fetchExistingVCCs = async (token: string, sourceCardId: string, profileCount?: number) => {
-    // Prevent duplicate calls
+  const fetchVCCsForSingleSource = async (
+    token: string,
+    sourceCardId: string,
+    controller: AbortController,
+    targetCount: number,
+    onProgress: (processed: number, maxProgress: number) => void,
+  ): Promise<UserCreditCard[]> => {
+    let allVCCs: UserCreditCard[] = []
+    let page = 0
+    let hasMorePages = true
+    let totalProcessed = 0
+    let totalAvailableVCCs = 0
+    let maxProgressValue = targetCount
+    let isFirstPage = true
+
+    while (hasMorePages) {
+      const url = "https://api.paywithextend.com/virtualcards"
+      const headers = {
+        Accept: "application/vnd.paywithextend.v2021-03-12+json",
+        Authorization: `Bearer ${token}`,
+        "X-Extend-Brand": "br_2F0trP1UmE59x1ZkNIAqsg",
+        "X-Extend-App-ID": "app.paywithextend.com",
+        "X-Extend-Platform": "web",
+      }
+
+      const params = new URLSearchParams({
+        count: "50",
+        page: page.toString(),
+        statuses: "ACTIVE",
+        type: "SOURCE",
+        creditCardId: sourceCardId,
+      })
+
+      const response = await fetch(`${url}?${params.toString()}`, {
+        headers,
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch VCCs on page ${page}`)
+      }
+
+      const data = await response.json()
+      const virtualCards = data.virtualCards || []
+
+      if (isFirstPage) {
+        totalAvailableVCCs = data.pagination?.totalItems || 0
+        if (targetCount !== Infinity) {
+          maxProgressValue = Math.min(targetCount, totalAvailableVCCs)
+        } else {
+          maxProgressValue = totalAvailableVCCs
+        }
+        isFirstPage = false
+      }
+
+      if (virtualCards.length === 0) {
+        break
+      }
+
+      const detailedCards = await Promise.all(
+        virtualCards.map(async (card: any) => {
+          return await getExtendVcn(card.id)
+        }),
+      )
+
+      const validCards = detailedCards.filter((card): card is UserCreditCard => card !== null)
+
+      if (!data.pagination?.totalItems) {
+        totalAvailableVCCs += validCards.length
+      }
+
+      const remainingNeeded = maxProgressValue - allVCCs.length
+      const cardsToAdd = remainingNeeded > 0 ? validCards.slice(0, remainingNeeded) : []
+
+      allVCCs = [...allVCCs, ...cardsToAdd]
+      totalProcessed += cardsToAdd.length
+
+      onProgress(totalProcessed, maxProgressValue)
+
+      if (allVCCs.length >= maxProgressValue) {
+        break
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 100))
+      page++
+    }
+
+    return allVCCs
+  }
+
+  // Function to fetch existing VCCs with pagination and filtering across multiple source cards
+  const fetchExistingVCCs = async (token: string, sourceCardIds: string[], profileCount?: number) => {
     if (isLoading || isFetchingVCCs) {
       return
     }
 
-    // Create abort controller for this fetch operation
     const controller = new AbortController()
     setAbortController(controller)
 
@@ -506,138 +597,48 @@ export default function ExtendVCCManager({ onProfilesBuilt, onClose, shouldReset
       setFilteredExistingVCCs([])
 
       let allVCCs: UserCreditCard[] = []
-      let page = 0
-      let hasMorePages = true
-      let totalProcessed = 0
-      let targetCount = (profileCount && profileCount > 0) ? profileCount : Infinity // If no profile count or invalid, fetch all cards
-      let totalAvailableVCCs = 0 // Will be set from API response totalItems
-      let maxProgressValue = targetCount // Will be set to min(profileCount, totalAvailableVCCs)
-      let isFirstPage = true // Track if this is the first page to extract totalItems
+      const targetCount = (profileCount && profileCount > 0) ? profileCount : Infinity
+      let globalProcessed = 0
+      let globalMaxProgress = 0
 
-      // Show initial progress for this specific source card
       setExistingVCCProgress(0)
 
-      while (hasMorePages) {
-        try {
-          const url = "https://api.paywithextend.com/virtualcards"
-          const headers = {
-            Accept: "application/vnd.paywithextend.v2021-03-12+json",
-            Authorization: `Bearer ${token}`,
-            "X-Extend-Brand": "br_2F0trP1UmE59x1ZkNIAqsg",
-            "X-Extend-App-ID": "app.paywithextend.com",
-            "X-Extend-Platform": "web",
-          }
+      for (let i = 0; i < sourceCardIds.length; i++) {
+        const sourceCardId = sourceCardIds[i]
+        const remainingNeeded = targetCount === Infinity ? Infinity : targetCount - allVCCs.length
 
-          const params = new URLSearchParams({
-            count: "50",
-            page: page.toString(),
-            statuses: "ACTIVE",
-            type: "SOURCE",
-            creditCardId: sourceCardId,
-          })
+        if (remainingNeeded <= 0) break
 
-          const response = await fetch(`${url}?${params.toString()}`, {
-            headers,
-            signal: controller.signal
-          })
-
-          if (!response.ok) {
-            throw new Error(`Failed to fetch VCCs on page ${page}`)
-          }
-
-          const data = await response.json()
-          const virtualCards = data.virtualCards || []
-
-          // Extract totalItems from the first page response
-          if (isFirstPage) {
-            totalAvailableVCCs = data.pagination?.totalItems || 0
-
-            // Set the fixed maximum progress value based on the smaller of profile count or total available VCCs
-            if (targetCount !== Infinity) {
-              maxProgressValue = Math.min(targetCount, totalAvailableVCCs)
-            } else {
-              maxProgressValue = totalAvailableVCCs
+        const cardsFromSource = await fetchVCCsForSingleSource(
+          token,
+          sourceCardId,
+          controller,
+          remainingNeeded,
+          (processed, maxProgress) => {
+            const currentGlobalProcessed = globalProcessed + processed
+            const currentGlobalMax = globalMaxProgress + maxProgress
+            setExistingVCCCurrent(currentGlobalProcessed)
+            setExistingVCCMaxProgress(currentGlobalMax)
+            if (currentGlobalMax > 0) {
+              setExistingVCCProgress(Math.min((currentGlobalProcessed / currentGlobalMax) * 100, 100))
             }
+            setExistingVCCTotal(currentGlobalProcessed)
+          },
+        )
 
-            // Set the max progress value in state immediately
-            setExistingVCCMaxProgress(maxProgressValue)
-            isFirstPage = false
+        globalProcessed += cardsFromSource.length
+        globalMaxProgress += cardsFromSource.length
+        allVCCs = [...allVCCs, ...cardsFromSource]
 
-            // If no totalItems in response, fall back to counting as we go
-            if (!data.pagination?.totalItems) {
-              console.warn("No totalItems in API response pagination, falling back to dynamic counting")
-            }
-          }
+        setExistingVCCCurrent(globalProcessed)
+        setExistingVCCMaxProgress(globalMaxProgress)
+        if (globalMaxProgress > 0) {
+          setExistingVCCProgress(Math.min((globalProcessed / globalMaxProgress) * 100, 100))
+        }
 
-          // If no more cards, break the loop
-          if (virtualCards.length === 0) {
-            hasMorePages = false
-            break
-          }
-
-          // Fetch detailed card information for each VCC
-          const detailedCards = await Promise.all(
-            virtualCards.map(async (card: any) => {
-              return await getExtendVcn(card.id)
-            })
-          )
-
-          // All cards returned by the API are already associated with the selected source card
-          // No filtering needed since we're using creditCardId parameter
-          const validCards = detailedCards.filter((card): card is UserCreditCard => card !== null)
-
-          // If no totalItems in API response, count as we go (fallback)
-          if (!data.pagination?.totalItems) {
-            totalAvailableVCCs += validCards.length
-          }
-
-          // Limit cards based on the smaller of profile count or total available VCCs
-          const remainingNeeded = maxProgressValue - allVCCs.length
-          const cardsToAdd = remainingNeeded > 0 ? validCards.slice(0, remainingNeeded) : []
-
-          allVCCs = [...allVCCs, ...cardsToAdd]
-          totalProcessed += cardsToAdd.length // Only count the cards we actually added
-
-          // Stop fetching if we've reached the max progress value (smaller of profile count or total available)
-          if (allVCCs.length >= maxProgressValue) {
-            hasMorePages = false
-            break
-          }
-
-          // Update progress
-          setExistingVCCCurrent(totalProcessed)
-
-          // Calculate progress percentage based on the fixed max progress value
-          let progressPercentage = 0
-
-          if (maxProgressValue > 0) {
-            // Calculate progress based on the fixed max progress value
-            progressPercentage = Math.min((totalProcessed / maxProgressValue) * 100, 100)
-          } else {
-            // Fallback to page-based progress if no max progress value
-            if (virtualCards.length === 50) {
-              // If we got a full page, we're still fetching
-              progressPercentage = Math.min(page * 20, 90) // 20% per page, max 90% until done
-            } else if (virtualCards.length < 50) {
-              // If we got less than 50 cards, we're likely at the end
-              progressPercentage = 100
-            } else if (totalProcessed === 0) {
-              // Just starting
-              progressPercentage = 5
-            }
-          }
-
-          setExistingVCCProgress(progressPercentage)
-          setExistingVCCTotal(totalProcessed)
-
-          // Add a small delay to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 100))
-
-          page++
-        } catch (error) {
-          console.error(`Error fetching page ${page}:`, error)
-          // Continue to next page even if current page fails
-          page++
+        if (targetCount !== Infinity && allVCCs.length >= targetCount) {
+          allVCCs = allVCCs.slice(0, targetCount)
+          break
         }
       }
 
@@ -645,17 +646,14 @@ export default function ExtendVCCManager({ onProfilesBuilt, onClose, shouldReset
       setImportedCards(allVCCs)
       onProfilesBuilt(allVCCs)
 
-      // Close the modal directly instead of showing imported stage
       onClose?.()
     } catch (err) {
       console.error("Fetch existing VCCs error", err)
 
-      // Check if the error is due to abort
       if (err instanceof Error && err.name === 'AbortError') {
         return
       }
 
-      // Only clear auth token if it's an authentication error (401, 403)
       if (err instanceof Error && err.message.includes('401')) {
         setError("Authentication failed. Please log in again.")
         deleteCookie("extend_access_token")
@@ -776,11 +774,11 @@ export default function ExtendVCCManager({ onProfilesBuilt, onClose, shouldReset
     if (stage === "fetching" && accessToken && mode == "new") {
       fetchSourceCards(accessToken, "source-selection")
     }
-    if (stage === "existing-fetching" && accessToken && selectedSourceCard && !isFetchingVCCs) {
+    if (stage === "existing-fetching" && accessToken && selectedSourceCards.length > 0 && !isFetchingVCCs) {
       setIsFetchingVCCs(true)
-      fetchExistingVCCs(accessToken, selectedSourceCard, profileCount)
+      fetchExistingVCCs(accessToken, selectedSourceCards, profileCount)
     }
-  }, [accessToken, stage, selectedSourceCard])
+  }, [accessToken, stage, selectedSourceCards])
 
   const handleClearAndRestart = () => {
     // Clear all local state
@@ -1422,39 +1420,77 @@ export default function ExtendVCCManager({ onProfilesBuilt, onClose, shouldReset
   }
 
   if (stage === "existing-source-selection") {
+    const allSelected = sourceCards.length > 0 && selectedSourceCards.length === sourceCards.length
+
+    const toggleSourceCard = (cardId: string) => {
+      setSelectedSourceCards(prev =>
+        prev.includes(cardId)
+          ? prev.filter(id => id !== cardId)
+          : [...prev, cardId]
+      )
+    }
+
+    const toggleAll = () => {
+      if (allSelected) {
+        setSelectedSourceCards([])
+      } else {
+        setSelectedSourceCards(sourceCards.map(c => c.id))
+      }
+    }
+
     return (
       <div className="w-full max-w-md mx-auto relative z-50">
         <div className="mb-6">
           <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 mb-2">
             <CreditCard className="h-5 w-5 text-blue-500" />
-            Select Source Card for Existing VCCs
+            Select Source Cards for Existing VCCs
           </h2>
-          <p className="text-gray-600">Choose a source card to fetch your existing virtual cards from:</p>
+          <p className="text-gray-600">Choose one or more source cards to fetch your existing virtual cards from:</p>
         </div>
         <div className="space-y-4">
-          <div className="relative z-50">
-            <Select value={selectedSourceCard} onValueChange={setSelectedSourceCard}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a source card" />
-              </SelectTrigger>
-              <SelectContent
-                position="popper"
-                sideOffset={4}
-                className="w-[var(--radix-select-trigger-width)] z-[60] bg-white max-h-none"
-                style={{ zIndex: 9999 }}
-              >
-                {sourceCards.map((card) => (
-                  <SelectItem
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <div
+              className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+              onClick={toggleAll}
+            >
+              <Checkbox
+                checked={allSelected}
+                onCheckedChange={toggleAll}
+                className="pointer-events-none"
+              />
+              <span className="text-sm font-medium text-gray-700">
+                {allSelected ? "Deselect All" : "Select All"} ({sourceCards.length} cards)
+              </span>
+            </div>
+            <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
+              {sourceCards.map((card) => {
+                const isChecked = selectedSourceCards.includes(card.id)
+                return (
+                  <div
                     key={card.id}
-                    value={card.id}
-                    className="hover:bg-gray-50"
+                    className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${isChecked ? "bg-blue-50 hover:bg-blue-100" : "bg-white hover:bg-gray-50"}`}
+                    onClick={() => toggleSourceCard(card.id)}
                   >
-                    <div className="font-medium text-gray-800">{card.displayName}</div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                    <Checkbox
+                      checked={isChecked}
+                      onCheckedChange={() => toggleSourceCard(card.id)}
+                      className="pointer-events-none"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-800 truncate">{card.displayName}</div>
+                      <div className="text-xs text-gray-500 truncate">{card.companyName}</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
+
+          {selectedSourceCards.length > 0 && (
+            <p className="text-sm text-gray-500">
+              {selectedSourceCards.length} card{selectedSourceCards.length !== 1 ? "s" : ""} selected
+            </p>
+          )}
 
           {error && (
             <Alert variant="destructive">
@@ -1475,7 +1511,7 @@ export default function ExtendVCCManager({ onProfilesBuilt, onClose, shouldReset
                 setStage("existing-fetching")
               }}
               className="flex-1 bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-600/25"
-              disabled={!selectedSourceCard || isLoading}
+              disabled={selectedSourceCards.length === 0 || isLoading}
             >
               {isLoading ? (
                 <>
@@ -1483,7 +1519,7 @@ export default function ExtendVCCManager({ onProfilesBuilt, onClose, shouldReset
                   Starting...
                 </>
               ) : (
-                "Fetch Existing VCCs"
+                `Fetch Existing VCCs (${selectedSourceCards.length} source${selectedSourceCards.length !== 1 ? "s" : ""})`
               )}
             </Button>
           </div>
