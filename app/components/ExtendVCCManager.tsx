@@ -504,75 +504,98 @@ export default function ExtendVCCManager({ onProfilesBuilt, onClose, shouldReset
     let isFirstPage = true
 
     while (hasMorePages) {
-      const url = "https://api.paywithextend.com/virtualcards"
-      const headers = {
-        Accept: "application/vnd.paywithextend.v2021-03-12+json",
-        Authorization: `Bearer ${token}`,
-        "X-Extend-Brand": "br_2F0trP1UmE59x1ZkNIAqsg",
-        "X-Extend-App-ID": "app.paywithextend.com",
-        "X-Extend-Platform": "web",
-      }
-
-      const params = new URLSearchParams({
-        count: "50",
-        page: page.toString(),
-        statuses: "ACTIVE",
-        type: "SOURCE",
-        creditCardId: sourceCardId,
-      })
-
-      const response = await fetch(`${url}?${params.toString()}`, {
-        headers,
-        signal: controller.signal,
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch VCCs on page ${page}`)
-      }
-
-      const data = await response.json()
-      const virtualCards = data.virtualCards || []
-
-      if (isFirstPage) {
-        totalAvailableVCCs = data.pagination?.totalItems || 0
-        if (targetCount !== Infinity) {
-          maxProgressValue = Math.min(targetCount, totalAvailableVCCs)
-        } else {
-          maxProgressValue = totalAvailableVCCs
+      try {
+        const url = "https://api.paywithextend.com/virtualcards"
+        const headers = {
+          Accept: "application/vnd.paywithextend.v2021-03-12+json",
+          Authorization: `Bearer ${token}`,
+          "X-Extend-Brand": "br_2F0trP1UmE59x1ZkNIAqsg",
+          "X-Extend-App-ID": "app.paywithextend.com",
+          "X-Extend-Platform": "web",
         }
-        isFirstPage = false
+
+        const params = new URLSearchParams({
+          count: "50",
+          page: page.toString(),
+          statuses: "ACTIVE",
+          type: "SOURCE",
+          creditCardId: sourceCardId,
+        })
+
+        const response = await fetch(`${url}?${params.toString()}`, {
+          headers,
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch VCCs on page ${page}`)
+        }
+
+        const data = await response.json()
+        const virtualCards = data.virtualCards || []
+
+        if (isFirstPage) {
+          totalAvailableVCCs = data.pagination?.totalItems || 0
+
+          if (targetCount !== Infinity) {
+            maxProgressValue = totalAvailableVCCs > 0
+              ? Math.min(targetCount, totalAvailableVCCs)
+              : targetCount
+          } else {
+            maxProgressValue = totalAvailableVCCs
+          }
+
+          onProgress(0, maxProgressValue)
+          isFirstPage = false
+
+          if (!data.pagination?.totalItems) {
+            console.warn("No totalItems in API response pagination, falling back to dynamic counting")
+          }
+        }
+
+        if (virtualCards.length === 0) {
+          hasMorePages = false
+          break
+        }
+
+        const detailedCards = await Promise.all(
+          virtualCards.map(async (card: any) => {
+            return await getExtendVcn(card.id)
+          }),
+        )
+
+        const validCards = detailedCards.filter((card): card is UserCreditCard => card !== null)
+
+        if (!data.pagination?.totalItems) {
+          totalAvailableVCCs += validCards.length
+          if (targetCount === Infinity) {
+            maxProgressValue = totalAvailableVCCs
+          }
+        }
+
+        if (maxProgressValue > 0) {
+          const remainingNeeded = maxProgressValue - allVCCs.length
+          const cardsToAdd = remainingNeeded > 0 ? validCards.slice(0, remainingNeeded) : []
+          allVCCs = [...allVCCs, ...cardsToAdd]
+          totalProcessed += cardsToAdd.length
+        } else {
+          allVCCs = [...allVCCs, ...validCards]
+          totalProcessed += validCards.length
+        }
+
+        onProgress(totalProcessed, maxProgressValue)
+
+        if (maxProgressValue > 0 && allVCCs.length >= maxProgressValue) {
+          hasMorePages = false
+          break
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 100))
+        page++
+      } catch (error) {
+        console.error(`Error fetching page ${page}:`, error)
+        page++
       }
-
-      if (virtualCards.length === 0) {
-        break
-      }
-
-      const detailedCards = await Promise.all(
-        virtualCards.map(async (card: any) => {
-          return await getExtendVcn(card.id)
-        }),
-      )
-
-      const validCards = detailedCards.filter((card): card is UserCreditCard => card !== null)
-
-      if (!data.pagination?.totalItems) {
-        totalAvailableVCCs += validCards.length
-      }
-
-      const remainingNeeded = maxProgressValue - allVCCs.length
-      const cardsToAdd = remainingNeeded > 0 ? validCards.slice(0, remainingNeeded) : []
-
-      allVCCs = [...allVCCs, ...cardsToAdd]
-      totalProcessed += cardsToAdd.length
-
-      onProgress(totalProcessed, maxProgressValue)
-
-      if (allVCCs.length >= maxProgressValue) {
-        break
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 100))
-      page++
     }
 
     return allVCCs
