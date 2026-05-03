@@ -125,6 +125,10 @@ const detectCardType = (cardNumber: string): string => {
   return "unknown";
 };
 
+export type TransformOptions = {
+  useSameAsShipping?: boolean;
+};
+
 export type BotFormat<T> = {
   /** Friendly label for UI */
   label: string;
@@ -133,7 +137,7 @@ export type BotFormat<T> = {
   /** CSV headers in order (only for CSV) */
   headers?: string[];
   /** Map a single Profile → whatever payload that bot expects */
-  transform: (g: string, p: Profile, index?: number) => T;
+  transform: (g: string, p: Profile, index?: number, options?: TransformOptions) => T;
   /** Output filename */
   filename: string;
 };
@@ -332,9 +336,10 @@ export const botFormats: Record<string, BotFormat<any>> = {
   "Refract Format": {
     label: "Refract Format (JSON)",
     fileType: "json",
-    transform: (g, p, index = 0) => {
+    transform: (g, p, index = 0, options) => {
       const uuid = uuidv4();
       const prfId = `prf-${uuid}`;
+      const sameAsShipping = options?.useSameAsShipping ?? false;
 
       return {
         name: `${g}_${index + 1}`,
@@ -351,18 +356,31 @@ export const botFormats: Record<string, BotFormat<any>> = {
           country: p.shippingAddress.countryName,
           phone: p.phone.replace(/\D/g, ''),
         },
-        billing: {
-          sameAsShipping: false,
-          firstName: p.billingAddress.firstName,
-          lastName: p.billingAddress.lastName,
-          address1: p.billingAddress.address1,
-          address2: p.billingAddress.address2 || "",
-          city: p.billingAddress.city,
-          province: p.billingAddress.state,
-          postalCode: p.billingAddress.zipCode,
-          country: p.billingAddress.countryName,
-          phone: p.phone.replace(/\D/g, ''),
-        },
+        billing: sameAsShipping
+          ? {
+              sameAsShipping: true,
+              firstName: "",
+              lastName: "",
+              address1: "",
+              address2: "",
+              city: "",
+              province: null,
+              postalCode: "",
+              country: null,
+              phone: "",
+            }
+          : {
+              sameAsShipping: false,
+              firstName: p.billingAddress.firstName,
+              lastName: p.billingAddress.lastName,
+              address1: p.billingAddress.address1,
+              address2: p.billingAddress.address2 || "",
+              city: p.billingAddress.city,
+              province: p.billingAddress.state,
+              postalCode: p.billingAddress.zipCode,
+              country: p.billingAddress.countryName,
+              phone: p.phone.replace(/\D/g, ''),
+            },
         payment: {
           name: p.card.holderName,
           num: p.card.number,

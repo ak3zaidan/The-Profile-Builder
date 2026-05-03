@@ -106,7 +106,7 @@ export function exportForBot(botKey: string, fileName: string, payload: Profile[
   }
 }
 
-export function formatProfilesForBot(groupName: string, profiles: Profile[], botKey: string) {
+export function formatProfilesForBot(groupName: string, profiles: Profile[], botKey: string, options?: { useSameAsShipping?: boolean }) {
   const bot = botFormats[botKey]
   if (!bot) throw new Error(`Unknown bot: ${botKey}`)
 
@@ -116,11 +116,11 @@ export function formatProfilesForBot(groupName: string, profiles: Profile[], bot
 
     // Use the first profile to get the group structure
     const firstProfile = profiles[0];
-    const groupData = bot.transform(groupName, firstProfile, 0);
+    const groupData = bot.transform(groupName, firstProfile, 0, options);
 
     // Collect all profiles into the profiles array
     const allProfiles = profiles.map((profile, index) => {
-      const profileData = bot.transform(groupName, profile, index);
+      const profileData = bot.transform(groupName, profile, index, options);
       return profileData.profiles[0]; // Extract the profile object from the transform result
     });
 
@@ -133,7 +133,7 @@ export function formatProfilesForBot(groupName: string, profiles: Profile[], bot
   }
 
   // Default behavior for other formats
-  return profiles.map((e, index) => bot.transform(groupName, e, index));
+  return profiles.map((e, index) => bot.transform(groupName, e, index, options));
 }
 
 type ToastType = "success" | "error" | "info"

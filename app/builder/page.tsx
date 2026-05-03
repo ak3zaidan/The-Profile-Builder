@@ -1672,7 +1672,7 @@ export default function ProfileBuilder() {
         // Merge all objects into one
         formattedForBot = valorProfiles.reduce((acc, profile) => ({ ...acc, ...profile }), {});
       } else {
-        formattedForBot = formatProfilesForBot(exportGroupName, cleanProfiles, exportType);
+        formattedForBot = formatProfilesForBot(exportGroupName, cleanProfiles, exportType, { useSameAsShipping });
       }
       const bot = botFormats[exportType];
       const baseFilename = bot ? bot.filename : `${exportType}`;
