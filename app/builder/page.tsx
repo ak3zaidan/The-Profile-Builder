@@ -926,7 +926,8 @@ export default function ProfileBuilder() {
             }
           };
 
-        case "Refract Format":
+        case "Refract Format": {
+          const refractSameAsShipping = profile.billing?.sameAsShipping === true;
           return {
             id: "",
             firstName: profile.shipping?.firstName || profile.firstName || "",
@@ -944,17 +945,29 @@ export default function ProfileBuilder() {
               country: profile.shipping?.country || "US",
               countryName: "United States"
             },
-            billingAddress: {
-              firstName: profile.billing?.firstName || profile.firstName || "",
-              lastName: profile.billing?.lastName || profile.lastName || "",
-              address1: profile.billing?.address1 || "",
-              address2: profile.billing?.address2 || "",
-              city: profile.billing?.city || "",
-              state: profile.billing?.province || "",
-              zipCode: profile.billing?.postalCode || "",
-              country: profile.billing?.country || "US",
-              countryName: "United States"
-            },
+            billingAddress: refractSameAsShipping
+              ? {
+                  firstName: "",
+                  lastName: "",
+                  address1: "",
+                  address2: "",
+                  city: "",
+                  state: "",
+                  zipCode: "",
+                  country: "",
+                  countryName: ""
+                }
+              : {
+                  firstName: profile.billing?.firstName || profile.firstName || "",
+                  lastName: profile.billing?.lastName || profile.lastName || "",
+                  address1: profile.billing?.address1 || "",
+                  address2: profile.billing?.address2 || "",
+                  city: profile.billing?.city || "",
+                  state: profile.billing?.province || "",
+                  zipCode: profile.billing?.postalCode || "",
+                  country: profile.billing?.country || "US",
+                  countryName: "United States"
+                },
             card: {
               holderName: profile.payment?.name || "",
               number: profile.payment?.num || "",
@@ -962,6 +975,7 @@ export default function ProfileBuilder() {
               cvv: profile.payment?.cvv || ""
             }
           };
+        }
 
         case "NSB Format":
           return {
